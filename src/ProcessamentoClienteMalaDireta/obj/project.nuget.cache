@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "dgSpecHash": "1CFcWaYAcx2V+n3qt45uuVG6RsKIznyh8/Vz7V6DZVcZzsGjPI5dB6wVIVy2xsbztHXlSVVSLQOnO+vNiNEIgg==",
+  "success": true,
+  "projectFilePath": "/home/marcos/Documentos/Pos Graduação/XPe/Projeto Aplicado/Sprints/Sprint 2/HG10/ProcessamentoClienteMalaDireta/src/ProcessamentoClienteMalaDireta/ProcessamentoClienteMalaDireta.csproj",
+  "expectedPackageFiles": [
+    "/home/marcos/.nuget/packages/amazon.lambda.core/2.7.0/amazon.lambda.core.2.7.0.nupkg.sha512",
+    "/home/marcos/.nuget/packages/amazon.lambda.serialization.systemtextjson/2.4.4/amazon.lambda.serialization.systemtextjson.2.4.4.nupkg.sha512",
+    "/home/marcos/.nuget/packages/awssdk.core/3.7.302.20/awssdk.core.3.7.302.20.nupkg.sha512",
+    "/home/marcos/.nuget/packages/awssdk.s3/3.7.307/awssdk.s3.3.7.307.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.extensions.configuration/8.0.0/microsoft.extensions.configuration.8.0.0.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.extensions.configuration.abstractions/8.0.0/microsoft.extensions.configuration.abstractions.8.0.0.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.extensions.dependencyinjection/8.0.1/microsoft.extensions.dependencyinjection.8.0.1.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.extensions.dependencyinjection.abstractions/8.0.2/microsoft.extensions.dependencyinjection.abstractions.8.0.2.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.extensions.logging/8.0.1/microsoft.extensions.logging.8.0.1.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.extensions.logging.abstractions/8.0.2/microsoft.extensions.logging.abstractions.8.0.2.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.extensions.options/8.0.2/microsoft.extensions.options.8.0.2.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.extensions.primitives/8.0.0/microsoft.extensions.primitives.8.0.0.nupkg.sha512",
+    "/home/marcos/.nuget/packages/system.text.json/8.0.5/system.text.json.8.0.5.nupkg.sha512",
+    "/home/marcos/.nuget/packages/microsoft.netcore.app.crossgen2.linux-x64/8.0.20/microsoft.netcore.app.crossgen2.linux-x64.8.0.20.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -6,11 +6,13 @@
     "All the command line options for the Lambda command can be specified in this file."
   ],
   "profile": "",
-  "region": "",
+  "region": "us-east-1",
   "configuration": "Release",
   "function-architecture": "x86_64",
   "function-runtime": "dotnet8",
   "function-memory-size": 512,
-  "function-timeout": 30,
-  "function-handler": "ProcessamentoClienteMalaDireta::ProcessamentoClienteMalaDireta.Function::FunctionHandler"
+  "function-timeout": 60,
+  "function-handler": "ProcessamentoClienteMalaDireta::ProcessamentoClienteMalaDireta.Function::FunctionHandler",
+  "function-name": "ProcessamentoMalaDireta",
+  "function-description": "Lambda para processamento de mala direta - conversão de CSV/TXT para PCL"
 }

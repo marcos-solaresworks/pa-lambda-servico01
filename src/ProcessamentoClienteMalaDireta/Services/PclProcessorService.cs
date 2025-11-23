@@ -6,10 +6,10 @@ namespace ProcessamentoClienteMalaDireta.Services;
 
 public interface IPclProcessorService
 {
-    Task<byte[]> ProcessarArquivoPclAsync(Stream arquivoOriginal, ConfiguracaoMalaDireta configuracao, ArquivoPcl metadados);
+    Task<byte[]> ProcessarDadosParaPclAsync(Stream arquivoDados, ConfiguracaoMalaDireta configuracao, ArquivoPcl metadados);
     byte[] GerarCabecalhoPcl(ConfiguracaoMalaDireta configuracao);
     byte[] GerarRodapePcl(ConfiguracaoMalaDireta configuracao);
-    byte[] AplicarConfiguracaoA4(byte[] conteudoPcl, ConfiguracaoMalaDireta configuracao);
+    byte[] GerarPclDeRegistros(List<Dictionary<string, string>> registros, ConfiguracaoMalaDireta configuracao);
 }
 
 public class PclProcessorService : IPclProcessorService
@@ -21,40 +21,89 @@ public class PclProcessorService : IPclProcessorService
         _logger = logger;
     }
 
-    public async Task<byte[]> ProcessarArquivoPclAsync(Stream arquivoOriginal, ConfiguracaoMalaDireta configuracao, ArquivoPcl metadados)
+    public async Task<byte[]> ProcessarDadosParaPclAsync(Stream arquivoDados, ConfiguracaoMalaDireta configuracao, ArquivoPcl metadados)
     {
-        _logger.LogInformation($"Iniciando processamento PCL para arquivo: {metadados.NomeArquivo}");
+        _logger.LogInformation($"Iniciando processamento de dados para PCL: {metadados.NomeArquivo}");
         
         try
         {
-            // 1. Ler conteúdo original do arquivo PCL
-            using var memoryStream = new MemoryStream();
-            await arquivoOriginal.CopyToAsync(memoryStream);
-            var conteudoOriginal = memoryStream.ToArray();
-            
-            _logger.LogInformation($"Arquivo original lido: {conteudoOriginal.Length} bytes");
+            // 1. Ler arquivo CSV/TXT
+            var registros = await LerArquivoDadosAsync(arquivoDados, metadados.NomeArquivo);
+            _logger.LogInformation($"Arquivo lido: {registros.Count} registros encontrados");
 
             // 2. Gerar cabeçalho PCL com configurações de Mala Direta
             var cabecalho = GerarCabecalhoPcl(configuracao);
             
-            // 3. Aplicar configurações específicas A4
-            var conteudoProcessado = AplicarConfiguracaoA4(conteudoOriginal, configuracao);
+            // 3. Gerar conteúdo PCL a partir dos registros
+            var conteudoPcl = GerarPclDeRegistros(registros, configuracao);
+            _logger.LogInformation($"Conteúdo PCL gerado: {conteudoPcl.Length} bytes");
             
             // 4. Gerar rodapé PCL
             var rodape = GerarRodapePcl(configuracao);
             
             // 5. Combinar todos os elementos
-            var arquivoFinal = CombinarElementosPcl(cabecalho, conteudoProcessado, rodape);
+            var arquivoFinal = CombinarElementosPcl(cabecalho, conteudoPcl, rodape);
             
-            _logger.LogInformation($"Processamento PCL concluído: {arquivoFinal.Length} bytes finais");
+            _logger.LogInformation($"Processamento PCL concluído: {arquivoFinal.Length} bytes finais, {registros.Count} registros processados");
             
             return arquivoFinal;
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Erro no processamento PCL: {ex.Message}");
+            _logger.LogError($"Erro no processamento de dados para PCL: {ex.Message}");
             throw;
         }
+    }
+
+    private async Task<List<Dictionary<string, string>>> LerArquivoDadosAsync(Stream arquivoDados, string nomeArquivo)
+    {
+        var registros = new List<Dictionary<string, string>>();
+        var extensao = Path.GetExtension(nomeArquivo).ToLowerInvariant();
+
+        using var reader = new StreamReader(arquivoDados, Encoding.UTF8);
+        
+        if (extensao == ".csv")
+        {
+            // Processar CSV
+            var header = (await reader.ReadLineAsync())?.Split(',');
+            if (header == null) return registros;
+
+            string? line;
+            while ((line = await reader.ReadLineAsync()) != null)
+            {
+                var valores = line.Split(',');
+                var registro = new Dictionary<string, string>();
+                
+                for (int i = 0; i < header.Length && i < valores.Length; i++)
+                {
+                    registro[header[i].Trim()] = valores[i].Trim();
+                }
+                
+                registros.Add(registro);
+            }
+        }
+        else // TXT (delimitado por tab ou pipe)
+        {
+            var header = (await reader.ReadLineAsync())?.Split(new[] { '\t', '|' });
+            if (header == null) return registros;
+
+            string? line;
+            while ((line = await reader.ReadLineAsync()) != null)
+            {
+                var valores = line.Split(new[] { '\t', '|' });
+                var registro = new Dictionary<string, string>();
+                
+                for (int i = 0; i < header.Length && i < valores.Length; i++)
+                {
+                    registro[header[i].Trim()] = valores[i].Trim();
+                }
+                
+                registros.Add(registro);
+            }
+        }
+
+        _logger.LogInformation($"Lidos {registros.Count} registros do arquivo {nomeArquivo}");
+        return registros;
     }
 
     public byte[] GerarCabecalhoPcl(ConfiguracaoMalaDireta configuracao)
@@ -111,36 +160,74 @@ public class PclProcessorService : IPclProcessorService
         return Encoding.ASCII.GetBytes(sb.ToString());
     }
 
-    public byte[] AplicarConfiguracaoA4(byte[] conteudoPcl, ConfiguracaoMalaDireta configuracao)
+    public byte[] GerarPclDeRegistros(List<Dictionary<string, string>> registros, ConfiguracaoMalaDireta configuracao)
     {
-        _logger.LogInformation("Aplicando configurações A4 ao conteúdo PCL");
+        _logger.LogInformation($"Gerando PCL para {registros.Count} registros");
         
-        var conteudoString = Encoding.ASCII.GetString(conteudoPcl);
-        
-        // Aplicar ajustes específicos para formato A4
-        var sb = new StringBuilder(conteudoString);
-        
-        // Substituir configurações de margem existentes
-        sb.Replace("\x1B&l0E", $"\x1B&l{configuracao.MargemSuperior}E"); // Margem superior
-        sb.Replace("\x1B&l0L", $"\x1B&a{configuracao.MargemEsquerda}L"); // Margem esquerda
-        
-        // Garantir formato A4
-        if (!conteudoString.Contains("\x1B&l26A"))
+        var sb = new StringBuilder();
+        var linhaAtual = configuracao.MargemSuperior + 10; // Posição vertical inicial
+
+        foreach (var registro in registros)
         {
-            sb.Insert(0, "\x1B&l26A"); // Forçar A4 se não estiver presente
-        }
-        
-        // Configurações específicas para Mala Direta
-        if (configuracao.EnderecoCompleto)
-        {
-            // Inserir campos para endereço completo
-            sb.Append("\n<!-- ENDERECO_COMPLETO_HABILITADO -->");
-        }
-        
-        if (configuracao.CodigoPostal)
-        {
-            // Inserir campos para código postal
-            sb.Append("\n<!-- CODIGO_POSTAL_HABILITADO -->");
+            // Nova página para cada registro (envelope)
+            if (registros.IndexOf(registro) > 0)
+            {
+                sb.Append("\x0C"); // Form Feed
+                linhaAtual = configuracao.MargemSuperior + 10;
+            }
+
+            // Posicionar cursor para início do endereço
+            sb.Append($"\x1B&a{linhaAtual}V"); // Posição vertical
+            sb.Append($"\x1B&a{configuracao.MargemEsquerda}H"); // Posição horizontal
+
+            // Imprimir Nome/Destinatário
+            if (registro.ContainsKey("Nome") || registro.ContainsKey("Destinatario"))
+            {
+                var nome = registro.GetValueOrDefault("Nome") ?? registro.GetValueOrDefault("Destinatario") ?? "";
+                sb.Append($"{nome}\n");
+                linhaAtual += 20;
+            }
+
+            // Imprimir Endereço
+            if (configuracao.EnderecoCompleto)
+            {
+                sb.Append($"\x1B&a{linhaAtual}V");
+                if (registro.ContainsKey("Endereco"))
+                {
+                    sb.Append($"{registro["Endereco"]}\n");
+                    linhaAtual += 20;
+                }
+
+                // Complemento
+                if (registro.ContainsKey("Complemento") && !string.IsNullOrEmpty(registro["Complemento"]))
+                {
+                    sb.Append($"\x1B&a{linhaAtual}V");
+                    sb.Append($"{registro["Complemento"]}\n");
+                    linhaAtual += 20;
+                }
+
+                // Bairro
+                if (registro.ContainsKey("Bairro"))
+                {
+                    sb.Append($"\x1B&a{linhaAtual}V");
+                    sb.Append($"{registro["Bairro"]}\n");
+                    linhaAtual += 20;
+                }
+
+                // Cidade/Estado
+                sb.Append($"\x1B&a{linhaAtual}V");
+                var cidade = registro.GetValueOrDefault("Cidade") ?? "";
+                var estado = registro.GetValueOrDefault("Estado") ?? registro.GetValueOrDefault("UF") ?? "";
+                sb.Append($"{cidade} - {estado}\n");
+                linhaAtual += 20;
+            }
+
+            // Código Postal/CEP
+            if (configuracao.CodigoPostal && registro.ContainsKey("CEP"))
+            {
+                sb.Append($"\x1B&a{linhaAtual}V");
+                sb.Append($"CEP: {registro["CEP"]}\n");
+            }
         }
         
         return Encoding.ASCII.GetBytes(sb.ToString());

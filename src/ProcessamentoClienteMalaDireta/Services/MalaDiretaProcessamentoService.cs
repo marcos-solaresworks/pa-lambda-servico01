@@ -17,8 +17,7 @@ public class MalaDiretaProcessamentoService : IMalaDiretaProcessamentoService
     private readonly ILambdaLogger _logger;
     
     // Configurações S3
-    private const string BUCKET_ORIGEM = "grafica-ltda-uploads";
-    private const string BUCKET_PROCESSADOS = "grafica-ltda-processados";
+    private const string BUCKET_S3 = "grafica-mvp-storage-qb1g7tq6";
 
     public MalaDiretaProcessamentoService(
         IS3Service s3Service, 
@@ -84,26 +83,33 @@ public class MalaDiretaProcessamentoService : IMalaDiretaProcessamentoService
 
     public async Task<ArquivoProcessadoResult> ProcessarArquivoAsync(ArquivoPcl arquivo, ConfiguracaoMalaDireta configuracao)
     {
-        // 1. Baixar arquivo original do S3
-        var chaveOrigem = $"uploads/lote-{arquivo.LoteId}/{arquivo.NomeArquivo}";
+        // 1. Baixar arquivo de dados (CSV/TXT) do S3 usando CaminhoArquivo do banco
+        // Formato esperado: lotes/3c72ef90-5fea-496c-9fe6-939b106970ec/impressao.csv
+        var chaveOrigem = arquivo.CaminhoArquivo;
+        _logger.LogInformation($"Baixando arquivo de dados do S3: s3://{BUCKET_S3}/{chaveOrigem}");
         
-        using var arquivoOriginal = await _s3Service.DownloadArquivoAsync(BUCKET_ORIGEM, chaveOrigem);
+        using var arquivoDados = await _s3Service.DownloadArquivoAsync(BUCKET_S3, chaveOrigem);
         
-        // 2. Processar arquivo PCL com configurações de Mala Direta
-        var arquivoProcessado = await _pclProcessor.ProcessarArquivoPclAsync(arquivoOriginal, configuracao, arquivo);
+        // 2. Processar dados e gerar PCL
+        _logger.LogInformation($"Processando dados e gerando PCL para {arquivo.NomeArquivo}");
+        var pclGerado = await _pclProcessor.ProcessarDadosParaPclAsync(arquivoDados, configuracao, arquivo);
         
-        // 3. Gerar caminho de destino no S3
+        // 3. Gerar caminho de destino no S3 para o PCL (mantém estrutura similar)
+        // Substitui 'lotes/' por 'processados/' mantendo GUID e nome
         var chaveDestino = GerarCaminhoDestinoS3(arquivo, configuracao);
         
-        // 4. Fazer upload do arquivo processado
-        using var streamProcessado = new MemoryStream(arquivoProcessado);
-        var caminhoS3 = await _s3Service.UploadArquivoAsync(BUCKET_PROCESSADOS, chaveDestino, streamProcessado, "application/vnd.hp-pcl");
+        // 4. Fazer upload do PCL gerado
+        _logger.LogInformation($"Fazendo upload do PCL gerado: s3://{BUCKET_S3}/{chaveDestino}");
+        using var streamProcessado = new MemoryStream(pclGerado);
+        var caminhoS3 = await _s3Service.UploadArquivoAsync(BUCKET_S3, chaveDestino, streamProcessado, "application/vnd.hp-pcl");
+        
+        _logger.LogInformation($"PCL gerado com sucesso: {caminhoS3} ({pclGerado.Length} bytes)");
         
         return new ArquivoProcessadoResult
         {
-            NomeArquivo = arquivo.NomeArquivo,
+            NomeArquivo = Path.GetFileNameWithoutExtension(arquivo.NomeArquivo) + ".pcl",
             CaminhoS3 = caminhoS3,
-            TamanhoProcessado = arquivoProcessado.Length,
+            TamanhoProcessado = pclGerado.Length,
             ChaveS3 = chaveDestino
         };
     }
@@ -145,11 +151,26 @@ public class MalaDiretaProcessamentoService : IMalaDiretaProcessamentoService
 
     private string GerarCaminhoDestinoS3(ArquivoPcl arquivo, ConfiguracaoMalaDireta configuracao)
     {
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
-        var nomeArquivoSemExtensao = Path.GetFileNameWithoutExtension(arquivo.NomeArquivo);
-        var nomeArquivoProcessado = $"{nomeArquivoSemExtensao}_processed_{timestamp}.pcl";
+        // CaminhoArquivo do banco: lotes/3c72ef90-5fea-496c-9fe6-939b106970ec/impressao.csv
+        // Destino: processados/3c72ef90-5fea-496c-9fe6-939b106970ec/impressao.pcl
         
-        return $"mala-direta/lote-{arquivo.LoteId}/{configuracao.FormatoImpressao.ToLower()}/{nomeArquivoProcessado}";
+        var caminhoOriginal = arquivo.CaminhoArquivo;
+        
+        // Extrair o GUID do caminho (parte entre lotes/ e /nomeArquivo)
+        var partes = caminhoOriginal.Split('/');
+        if (partes.Length >= 3 && partes[0] == "lotes")
+        {
+            var guid = partes[1];
+            var nomeArquivoSemExtensao = Path.GetFileNameWithoutExtension(arquivo.NomeArquivo);
+            var nomeArquivoPcl = $"{nomeArquivoSemExtensao}.pcl";
+            
+            return $"processados/{guid}/{nomeArquivoPcl}";
+        }
+        
+        // Fallback se o formato não for o esperado
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
+        var nomeArquivoProcessado = $"{Path.GetFileNameWithoutExtension(arquivo.NomeArquivo)}_{timestamp}.pcl";
+        return $"processados/lote-{arquivo.LoteId}/{nomeArquivoProcessado}";
     }
 
     private async Task AplicarRegrasMalaDiretaAsync(LambdaProcessamentoPayload payload, ConfiguracaoMalaDireta configuracao)
